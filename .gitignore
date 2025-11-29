@@ -1,0 +1,85 @@
+# =============================================================================
+# CrashSeverityNet - .gitignore for Public GitHub Repository
+# =============================================================================
+# This file prevents data, models, results, and secrets from being committed.
+
+# --- Raw data (Kaggle / personal datasets) ---
+*.csv
+*.tsv
+*.xlsx
+*.parquet
+data/
+US_Accidents*
+dataset/
+raw_data/
+
+# --- Model weights / checkpoints ---
+models/**/*.pt
+models/**/*.pth
+models/**/*.ckpt
+models/**/*.joblib
+checkpoints/
+*.onnx
+*.h5
+*.pkl
+
+# --- Experimental results / logs ---
+results/
+logs/
+wandb/
+mlruns/
+tensorboard/
+*.npz
+
+# --- Secret information / environment files ---
+*.env
+.env.*
+*secret*
+*.pem
+*.key
+*.p12
+*.token
+*credentials*
+config_private.json
+
+# --- IDE / OS / cache ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Python virtual environments ---
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# --- Jupyter Notebook outputs ---
+*.ipynb_checkpoints
+.ipynb_checkpoints/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Windows ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Temporary files ---
+*.tmp
+*.bak
+*.log
+*.swp

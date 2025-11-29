@@ -1,5 +1,16 @@
 import numpy as np
-from gymnasium import spaces # OpenAI Gym 스타일 인터페이스를 위해 gymnasium 사용
+from gymnasium import spaces
+import sys
+import os
+import pandas as pd
+
+# Add root directory to path to import severity_pipeline
+sys.path.append(os.getcwd())
+try:
+    import severity_pipeline
+except ImportError:
+    print("Warning: severity_pipeline not found. Severity prediction will be disabled.")
+    severity_pipeline = None
 
 class VehicleFollowingEnv:
     def __init__(self):
@@ -22,12 +33,31 @@ class VehicleFollowingEnv:
         self.lead_deceleration_start_step = 200 # 선행차가 감속을 시작하는 스텝 (예시)
         self.lead_deceleration_rate = -3.0 # 선행차 감속률 (m/s^2)
 
-        # 상태 공간 정의: [distance, relative_velocity, ego_velocity, brake_signal]
+        # Severity Model
+        self.severity_model = None
+        if severity_pipeline and os.path.exists(severity_pipeline.MODEL_PATH):
+            try:
+                self.severity_model = severity_pipeline.load_model(severity_pipeline.MODEL_PATH)
+                print("Severity model loaded successfully.")
+            except Exception as e:
+                print(f"Failed to load severity model: {e}")
+
+        # Environmental State (Weather)
+        self.weather_condition = "Clear"
+        self.visibility = 10.0
+        self.temperature = 70.0
+        self.humidity = 50.0
+        self.wind_speed = 5.0
+        self.precipitation = 0.0
+        self.is_day = "Day"
+        self.current_severity = 0.0
+
+        # 상태 공간 정의: [distance, relative_velocity, ego_velocity, brake_signal, predicted_severity]
         # Gym Box 형태로 정의 (low, high, shape)
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, -np.inf, 0.0, 0.0]),
-            high=np.array([np.inf, np.inf, 30.0, 1.0]), # max_ego_velocity = 30 m/s (약 108 km/h)
-            shape=(4,),
+            low=np.array([-np.inf, -np.inf, 0.0, 0.0, 0.0]),
+            high=np.array([np.inf, np.inf, 30.0, 1.0, 4.0]), # max_ego_velocity = 30 m/s, severity 0-4
+            shape=(5,),
             dtype=np.float32
         )
 
@@ -53,6 +83,32 @@ class VehicleFollowingEnv:
 
         # TODO: Isaac Sim Asset 초기화
         self._init_isaac_sim_assets()
+
+    def _get_predicted_severity(self):
+        if self.severity_model is None:
+            return 0.0
+        
+        # Create DataFrame for prediction
+        data = {
+            "Temperature(F)": [self.temperature],
+            "Humidity(%)": [self.humidity],
+            "Pressure(in)": [30.0],
+            "Visibility(mi)": [self.visibility],
+            "Wind_Speed(mph)": [self.wind_speed],
+            "Precipitation(in)": [self.precipitation],
+            "Weather_Condition": [self.weather_condition],
+            "Sunrise_Sunset": [self.is_day],
+            "Civil_Twilight": [self.is_day],
+            "Nautical_Twilight": [self.is_day],
+            "Astronomical_Twilight": [self.is_day]
+        }
+        df = pd.DataFrame(data)
+        try:
+            pred, _ = severity_pipeline.predict_severity(self.severity_model, df)
+            return float(pred[0])
+        except Exception as e:
+            # print(f"Severity prediction error: {e}")
+            return 0.0
 
     def _init_isaac_sim_assets(self):
         """
@@ -168,8 +224,32 @@ class VehicleFollowingEnv(gym.Env):
         self.distance = self.lead_position - self.ego_position
         self.relative_velocity = self.lead_velocity - self.ego_velocity
 
-        obs = np.array([self.distance, self.relative_velocity, self.ego_velocity, self.brake_signal], dtype=np.float32)
-        info = {}
+        # Randomize weather for this episode
+        self.weather_condition = np.random.choice(["Clear", "Rain", "Snow", "Fog", "Heavy Rain"])
+        if self.weather_condition == "Rain":
+            self.visibility = 5.0
+            self.precipitation = 0.2
+            self.friction = 0.8
+        elif self.weather_condition == "Heavy Rain":
+            self.visibility = 2.0
+            self.precipitation = 1.0
+            self.friction = 0.6
+        elif self.weather_condition == "Snow":
+            self.visibility = 3.0
+            self.temperature = 20.0
+            self.friction = 0.4
+        elif self.weather_condition == "Fog":
+            self.visibility = 0.5
+            self.friction = 0.9
+        else: # Clear
+            self.visibility = 10.0
+            self.precipitation = 0.0
+            self.friction = 1.0
+
+        self.current_severity = self._get_predicted_severity()
+
+        obs = np.array([self.distance, self.relative_velocity, self.ego_velocity, self.brake_signal, self.current_severity], dtype=np.float32)
+        info = {"weather": self.weather_condition, "severity": self.current_severity}
         return obs, info
 
     def step(self, action):
@@ -223,8 +303,8 @@ class VehicleFollowingEnv(gym.Env):
 
         reward = self.compute_reward(acceleration)
 
-        obs = np.array([self.distance, self.relative_velocity, self.ego_velocity, self.brake_signal], dtype=np.float32)
-        info = {"current_step": self.current_step, "ego_velocity": self.ego_velocity, "distance": self.distance}
+        obs = np.array([self.distance, self.relative_velocity, self.ego_velocity, self.brake_signal, self.current_severity], dtype=np.float32)
+        info = {"current_step": self.current_step, "ego_velocity": self.ego_velocity, "distance": self.distance, "severity": self.current_severity}
 
         return obs, float(reward), terminated, truncated, info
 
