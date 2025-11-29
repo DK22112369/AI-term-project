@@ -4,6 +4,10 @@ import pandas as pd
 import numpy as np
 import json
 import os
+import sys
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def plot_confusion_matrix(cm, classes, title, filename):
     # Normalize

@@ -9,7 +9,7 @@ import joblib
 from sklearn.metrics import accuracy_score, recall_score
 
 # Add parent directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.crash_severity_net import CrashSeverityNet
 from data.preprocess_us_accidents import load_full_dataset, stratified_sample, clean_and_engineer_features, transform_with_preprocessors, load_preprocessors

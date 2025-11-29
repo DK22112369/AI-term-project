@@ -6,7 +6,7 @@ import sys
 import joblib
 
 # Add parent directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.crash_severity_net import CrashSeverityNet
 

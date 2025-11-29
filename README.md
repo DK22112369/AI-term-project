@@ -1,198 +1,92 @@
-# CrashSeverityNet: Traffic Accident Severity Prediction
+# 미국 교통사고 심각도 예측 AI 프로젝트 (US Accidents Severity Prediction)
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+이 프로젝트는 미국 교통사고 데이터(US Accidents Dataset)를 활용하여 사고의 심각도(Severity 1~4)를 예측하는 AI 모델을 개발하는 연구 프로젝트입니다. 특히, **치명적인 사고(Severity 4)의 재현율(Recall)을 극대화**하여 안전 중심의 예측 시스템을 구축하는 것을 목표로 합니다.
 
-A comprehensive deep learning framework for predicting traffic accident severity using the US Accidents dataset. This project implements group-wise late fusion architecture (CrashSeverityNet) alongside state-of-the-art baselines and advanced class imbalance handling techniques.
+## 📁 디렉토리 구조 (Directory Structure)
 
----
+프로젝트는 다음과 같은 구조로 정리되어 있습니다.
 
-## 🚨 Important: Dataset Notice
+```
+project_root/
+├── data/                   # 데이터 로드 및 전처리 관련 코드
+│   ├── preprocess_us_accidents.py  # 전처리 파이프라인
+│   └── raw/                        # 원본 데이터 (gitignored)
+├── models/                 # 모델 정의 코드
+│   ├── crash_severity_net.py       # 메인 모델 (Late Fusion MLP)
+│   └── tab_transformer.py          # 실험적 모델 (TabTransformer)
+├── scripts/                # 실행 스크립트 (학습, 평가, 시각화 등)
+│   ├── train.py                    # 모델 학습
+│   ├── evaluate_kfold.py           # K-Fold 교차 검증
+│   ├── calibrate.py                # 임계값 보정 (Threshold Calibration)
+│   ├── plot_pr_curve.py            # PR 곡선 생성
+│   ├── plot_thesis_figures.py      # 논문용 그래프 생성
+│   └── generate_report.py          # 결과 요약 리포트 생성
+├── experiments/            # 실험용 스크립트
+│   ├── find_best_model.py          # 최적 모델 탐색
+│   └── generate_weights_plot.py    # 가중치 시각화
+├── analysis/               # 분석 스크립트
+│   └── explain_model.py            # SHAP 기반 설명 가능성 분석
+├── thesis_materials/       # 논문 관련 자료 (결과, 그래프, 방법론)
+│   ├── figures/                    # 생성된 그래프 이미지
+│   ├── results_summary.md          # 결과 요약
+│   └── methodology_details.md      # 방법론 상세
+├── requirements.txt        # 의존성 패키지 목록
+└── README.md               # 프로젝트 설명서
+```
 
-**This repository contains CODE ONLY, not the dataset.**
+## 🚀 설치 방법 (Installation)
 
-- The US Accidents dataset must be downloaded separately from **[Kaggle](https://www.kaggle.com/datasets/sobhanmoosavi/us-accidents)**.
-- Per Kaggle's Terms of Use, we **cannot redistribute the original data files** in this repository.
-- After downloading, place the dataset in a local directory and specify the path using the `--data_path` argument when running scripts.
+Python 3.8 이상 환경에서 실행하는 것을 권장합니다.
 
-**Example**:
+1. **가상환경 생성 및 활성화**
+   ```bash
+   python -m venv .venv
+   # Windows
+   .\.venv\Scripts\activate
+   # Mac/Linux
+   source .venv/bin/activate
+   ```
+
+2. **의존성 패키지 설치**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## 💻 실행 방법 (Usage)
+
+모든 스크립트는 프로젝트 루트 디렉토리에서 실행해야 합니다.
+
+### 1. 모델 학습 (Training)
+기본 `CrashSeverityNet` 모델을 학습합니다.
 ```bash
-python train_crash_severity_net.py --data_path /path/to/US_Accidents_March23.csv
+python scripts/train.py --model_type crash_severity_net --epochs 10 --batch_size 256
 ```
+*옵션:*
+- `--loss_type`: `ce` (CrossEntropy), `focal` (Focal Loss), `ce_weighted` (Weighted CE)
+- `--split_strategy`: `time` (시간순 분할), `random` (무작위 분할)
 
----
-
-## 📋 Project Overview
-
-### Features
-- ✅ **Novel Architecture**: Group-wise Late Fusion (CrashSeverityNet) for multi-modal tabular data
-- ✅ **Advanced Baselines**: RandomForest, XGBoost, CatBoost, LightGBM, TabTransformer
-- ✅ **Class Imbalance Handling**: Weighted Loss, Focal Loss, SMOTE-NC, WeightedRandomSampler
-- ✅ **Rigorous Evaluation**: K-Fold Cross Validation, Time-based Splitting
-- ✅ **Explainability**: SHAP analysis for model interpretability
-- ✅ **Production-Ready**: Real-time inference API with saved preprocessors
-
-### Key Results (Preliminary - 1% Sample)
-- **CatBoost Baseline**: 89.7% accuracy
-- **TabTransformer**: 78.3% accuracy
-- **SMOTE-NC + EarlyMLP**: 62.1% accuracy with significantly improved minority class recall
-
----
-
-## 🗂️ Repository Structure
-
-```
-CrashSeverityNet/
-├── data/
-│   └── preprocess_us_accidents.py      # Data loading, cleaning, feature engineering
-├── models/
-│   ├── crash_severity_net.py          # Proposed Late Fusion model
-│   ├── early_fusion_mlp.py            # Early Fusion baseline
-│   ├── tab_transformer.py              # TabTransformer implementation
-│   └── losses.py                       # Focal Loss
-├── baselines/
-│   └── train_baseline_ml.py           # RF, XGB, CatBoost, LGBM training
-├── utils/
-│   ├── common.py                       # Reproducibility utilities (set_seed)
-│   └── metrics.py                      # Evaluation metrics
-├── visualization/
-│   └── plots.py                        # Confusion matrix, loss curves
-├── analysis/
-│   └── explain_model.py                # SHAP explainability
-├── inference/
-│   └── predict.py                      # Real-time inference API
-├── train_crash_severity_net.py         # Main training script
-├── run_kfold_evaluation.py             # K-Fold Cross Validation
-└── docs/
-    ├── experiment_guide.md             # How to run experiments
-    ├── literature_gap_analysis.md      # Comparison with SOTA research
-    └── thesis_summary.md               # Comprehensive research documentation
-```
-
----
-
-## 🛠️ Installation
-
-### Requirements
-- Python 3.9+
-- CUDA 11.8+ (optional, for GPU acceleration)
-
-### Setup
+### 2. 모델 평가 (Evaluation)
+K-Fold 교차 검증을 수행하여 모델의 일반화 성능을 평가합니다.
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/CrashSeverityNet.git
-cd CrashSeverityNet
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install torch torchvision scikit-learn pandas numpy matplotlib seaborn tqdm
-pip install xgboost catboost lightgbm imbalanced-learn shap joblib
+python scripts/evaluate_kfold.py --folds 5 --model_type rf
 ```
 
----
-
-## 🚀 Quick Start
-
-### 1. Download Dataset
-Download the US Accidents dataset from [Kaggle](https://www.kaggle.com/datasets/sobhanmoosavi/us-accidents) and place it in a local directory.
-
-### 2. Train CrashSeverityNet (Proposed Model)
+### 3. 임계값 보정 (Threshold Calibration)
+Severity 4(치명적 사고)의 재현율을 높이기 위해 최적의 결정 임계값을 찾습니다.
 ```bash
-python train_crash_severity_net.py \
-  --model_type crash_severity_net \
-  --loss_type ce_weighted \
-  --split_strategy time \
-  --epochs 20 \
-  --sample_frac 0.1 \
-  --data_path /path/to/US_Accidents_March23.csv
+python scripts/calibrate.py
 ```
 
-### 3. Train CatBoost Baseline
+### 4. 시각화 및 리포트 생성 (Visualization)
+논문에 사용할 그래프(Confusion Matrix, Recall Comparison 등)를 생성합니다.
 ```bash
-python baselines/train_baseline_ml.py \
-  --model_type catboost \
-  --split_strategy time \
-  --sample_frac 0.1 \
-  --data_path /path/to/US_Accidents_March23.csv
+python scripts/plot_thesis_figures.py
 ```
 
-### 4. Run K-Fold Cross Validation
-```bash
-python run_kfold_evaluation.py \
-  --model_type catboost \
-  --folds 5 \
-  --sample_frac 0.1 \
-  --data_path /path/to/US_Accidents_March23.csv
-```
+## 📊 논문 자료 (Thesis Materials)
+모든 실험 결과와 그래프는 `thesis_materials/` 디렉토리에 저장됩니다.
+- **결과 요약**: [thesis_materials/results_summary.md](thesis_materials/results_summary.md)
+- **주요 그래프**: `thesis_materials/figures/`
 
-### 5. Run Inference
-```bash
-python inference/predict.py \
-  --model_path models/crash_severity_net_ce_weighted_time.pt \
-  --preprocessor_path models/crash_severity_net_ce_weighted_time_preprocessors.joblib \
-  --input_json '{"Start_Lat": 39.0, "Start_Lng": -84.0, "Temperature(F)": 55.0, ...}'
-```
-
----
-
-## 📚 Documentation
-
-- **[Experiment Guide](docs/experiment_guide.md)**: Detailed instructions for running all experiments
-- **[Literature Gap Analysis](docs/literature_gap_analysis.md)**: Comparison with state-of-the-art research
-- **[Thesis Summary](docs/thesis_summary.md)**: Comprehensive research planning and methodology document
-
----
-
-## 🎯 Key Contributions
-
-1. **Group-wise Late Fusion Architecture** tailored for heterogeneous tabular data
-2. **Systematic Comparison** of 4 class imbalance handling techniques
-3. **SOTA Baselines**: First study comparing CatBoost, LightGBM, and TabTransformer on US Accidents
-4. **Rigorous Evaluation**: Time-based splitting + K-Fold CV prevents data leakage
-5. **Production-Ready**: Inference API with SHAP explainability
-
----
-
-## 📝 Citation
-
-If you use this code or methodology in your research, please cite:
-
-```bibtex
-@misc{crashseveritynet2025,
-  title={CrashSeverityNet: Advanced Deep Learning Framework for Traffic Accident Severity Prediction},
-  author={CrashSeverityNet Research Team},
-  year={2025},
-  publisher={GitHub},
-  howpublished={\url{https://github.com/yourusername/CrashSeverityNet}}
-}
-```
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **Dataset**: Sobhan Moosavi et al., "A Countrywide Traffic Accident Dataset" (Kaggle)
-- **Frameworks**: PyTorch, scikit-learn, CatBoost, LightGBM, XGBoost
-- **Inspiration**: TabTransformer (Huang et al., 2020), Focal Loss (Lin et al., 2017)
-
----
-
-## ⚠️ Disclaimer
-
-This project is for **research and educational purposes only**. The models and results presented are not intended for use in safety-critical applications without further validation and testing.
-
----
-
-## 📧 Contact
-
-For questions or collaboration inquiries, please open an issue on GitHub.
+## 📝 라이선스
+이 프로젝트는 학술 연구 목적으로 작성되었습니다.

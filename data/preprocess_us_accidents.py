@@ -6,7 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 import joblib
 import torch
-from imblearn.over_sampling import SMOTENC, SMOTE
+from imblearn.over_sampling import SMOTE
 
 # ==========================================
 # 1. Feature Groups Definition
@@ -101,8 +101,8 @@ def clean_and_engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype(int)
             
-    # Simplify Weather Condition (Optional, but good for OHE)
-    # For now, we keep top N or just use it as is (OneHotEncoder handles unknown)
+    # Simplify Weather Condition (Optional)
+    # OneHotEncoder will handle unknown categories automatically.
     
     return df
 

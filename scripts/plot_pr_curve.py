@@ -1,18 +1,3 @@
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve, auc
-import os
-import sys
-
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from data.preprocess_us_accidents import load_full_dataset, stratified_sample, clean_and_engineer_features, fit_feature_transformers, transform_with_preprocessors, time_based_split, load_preprocessors
-from models.crash_severity_net import CrashSeverityNet
-from torch.utils.data import DataLoader, TensorDataset
-
-def generate_pr_curve():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
