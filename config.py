@@ -28,6 +28,11 @@ class Config:
 		# Loss coefficients
 		self.entropy_coef = 0.01
 		self.value_loss_coef = 0.5
+		# Network sizes
+		self.policy_hidden_sizes = (64, 64)
+		self.value_hidden_sizes = (64, 64)
+		# Initial policy std (log_std init)
+		self.policy_log_std_init = -0.5
 
 		# 학습 루프 관련 하이퍼파라미터
 		self.num_envs = 4  # 여러 환경을 동시에 돌릴 개수

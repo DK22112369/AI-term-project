@@ -9,6 +9,7 @@
 *.xlsx
 *.parquet
 data/
+!data/*.py
 US_Accidents*
 dataset/
 raw_data/

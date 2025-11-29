@@ -1,7 +1,5 @@
 import argparse
 import os
-import argparse
-import os
 import sys
 import json
 import numpy as np
@@ -10,13 +8,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
+from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 import joblib
-from sklearn.model_selection import train_test_split
-from sklearn.utils.class_weight import compute_class_weight
-
-# Add parent directory to path to import custom modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from data.preprocess_us_accidents import (
     load_full_dataset, 
@@ -98,6 +92,7 @@ def main():
     # 2. Split Data
     if args.split_strategy == "random":
         print("Splitting data (Stratified Random)...")
+        from sklearn.model_selection import train_test_split
         df_train, df_test = train_test_split(df, test_size=0.2, random_state=args.seed, stratify=df["Severity"])
         df_train, df_val = train_test_split(df_train, test_size=0.125, random_state=args.seed, stratify=df_train["Severity"]) # 0.125 * 0.8 = 0.1
     else:
@@ -115,50 +110,43 @@ def main():
     save_preprocessors(bundle, f"models/{experiment_name}_preprocessors.joblib")
     
     print("Transforming datasets...")
-    X_d_train, X_e_train, X_t_train, y_train = transform_with_preprocessors(df_train, bundle, args.device)
-    X_d_val, X_e_val, X_t_val, y_val = transform_with_preprocessors(df_val, bundle, args.device)
-    X_d_test, X_e_test, X_t_test, y_test = transform_with_preprocessors(df_test, bundle, args.device)
+    # Returns: Temporal, Weather, Road, Spatial, Targets
+    X_t_train, X_w_train, X_r_train, X_s_train, y_train = transform_with_preprocessors(df_train, bundle, args.device)
+    X_t_val, X_w_val, X_r_val, X_s_val, y_val = transform_with_preprocessors(df_val, bundle, args.device)
+    X_t_test, X_w_test, X_r_test, X_s_test, y_test = transform_with_preprocessors(df_test, bundle, args.device)
     
     # 4. SMOTE-NC Handling
     if args.use_smote:
         if args.model_type == "crash_severity_net":
             print("Warning: SMOTE-NC is not recommended for CrashSeverityNet (Late Fusion). Ignoring.")
         else:
-            # For EarlyMLP/TabTransformer, we need concatenated input
-            # We must move to CPU for SMOTE
-            X_train_cat = torch.cat([X_d_train, X_e_train, X_t_train], dim=1).cpu().numpy()
+            # Concatenate all features
+            X_train_cat = torch.cat([X_t_train, X_w_train, X_r_train, X_s_train], dim=1).cpu().numpy()
             y_train_np = y_train.cpu().numpy()
             
-            # Identify categorical indices? 
-            # We don't have them easily from OHE. 
-            # We will assume NO categorical indices for SMOTE-NC if we use OHE features (treat as continuous)
-            # Or we just use standard SMOTE.
-            # Given the OHE nature, standard SMOTE is often applied to OHE data in literature, 
-            # though SMOTE-NC is better if we had raw categories.
-            # We will use standard SMOTE here as 'apply_smote_nc' handles empty cat_indices by using SMOTE.
             X_res, y_res = apply_smote_nc(X_train_cat, y_train_np, cat_indices=[])
             
             # Update tensors
             X_train_cat_t = torch.FloatTensor(X_res).to(args.device)
             y_train = torch.LongTensor(y_res).to(args.device)
             
-            # For TabTransformer/EarlyMLP, we need to split back if they expect split inputs?
-            # Actually, EarlyMLP forward takes (xd, xe, xt).
-            # We need to know the split points.
-            d_dim = X_d_train.shape[1]
-            e_dim = X_e_train.shape[1]
+            # Split back
             t_dim = X_t_train.shape[1]
+            w_dim = X_w_train.shape[1]
+            r_dim = X_r_train.shape[1]
+            s_dim = X_s_train.shape[1]
             
-            X_d_train = X_train_cat_t[:, :d_dim]
-            X_e_train = X_train_cat_t[:, d_dim:d_dim+e_dim]
-            X_t_train = X_train_cat_t[:, d_dim+e_dim:]
+            X_t_train = X_train_cat_t[:, :t_dim]
+            X_w_train = X_train_cat_t[:, t_dim:t_dim+w_dim]
+            X_r_train = X_train_cat_t[:, t_dim+w_dim:t_dim+w_dim+r_dim]
+            X_s_train = X_train_cat_t[:, t_dim+w_dim+r_dim:]
             
             print(f"SMOTE applied. Train size: {len(y_train)}")
 
     # 5. Dataset & DataLoader
-    train_dataset = TensorDataset(X_d_train, X_e_train, X_t_train, y_train)
-    val_dataset = TensorDataset(X_d_val, X_e_val, X_t_val, y_val)
-    test_dataset = TensorDataset(X_d_test, X_e_test, X_t_test, y_test)
+    train_dataset = TensorDataset(X_t_train, X_w_train, X_r_train, X_s_train, y_train)
+    val_dataset = TensorDataset(X_t_val, X_w_val, X_r_val, X_s_val, y_val)
+    test_dataset = TensorDataset(X_t_test, X_w_test, X_r_test, X_s_test, y_test)
     
     sampler = None
     if args.use_sampler and not args.use_smote:
@@ -178,20 +166,22 @@ def main():
     
     # 6. Model Initialization
     num_classes = 4
-    d_in = X_d_train.shape[1]
-    e_in = X_e_train.shape[1]
-    t_in = X_t_train.shape[1]
+    input_dims = {
+        'temporal': X_t_train.shape[1],
+        'weather': X_w_train.shape[1],
+        'road': X_r_train.shape[1],
+        'spatial': X_s_train.shape[1]
+    }
     
     if args.model_type == "crash_severity_net":
-        model = CrashSeverityNet(d_in, e_in, t_in, num_classes).to(args.device)
+        model = CrashSeverityNet(input_dims, num_classes).to(args.device)
     elif args.model_type == "early_mlp":
-        model = EarlyFusionMLP(d_in + e_in + t_in, num_classes).to(args.device)
+        total_dim = sum(input_dims.values())
+        model = EarlyFusionMLP(total_dim, num_classes).to(args.device)
     elif args.model_type == "tab_transformer":
-        # We treat OHE groups as "categorical" inputs for our adapted TabTransformer
-        # cat_cardinalities will be [d_in, e_in, t_in] (the size of OHE vectors)
-        # num_continuous is 0 (all are treated as OHE groups here for simplicity)
+        # Order matters for TabTransformer list input
         model = TabTransformer(
-            cat_cardinalities=[d_in, e_in, t_in],
+            cat_cardinalities=[input_dims['temporal'], input_dims['weather'], input_dims['road'], input_dims['spatial']],
             num_continuous=0,
             num_classes=num_classes,
             use_ohe_input=True
@@ -214,17 +204,23 @@ def main():
     for epoch in range(args.epochs):
         model.train()
         train_loss = 0
-        for xd, xe, xt, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs}", leave=False):
-            xd, xe, xt, y = xd.to(args.device), xe.to(args.device), xt.to(args.device), y.to(args.device)
+        for xt, xw, xr, xs, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs}", leave=False):
+            xt, xw, xr, xs, y = xt.to(args.device), xw.to(args.device), xr.to(args.device), xs.to(args.device), y.to(args.device)
             
             optimizer.zero_grad()
             
-            if args.model_type == "tab_transformer":
-                # TabTransformer expects x_cat as list of tensors, x_cont as tensor
-                # We treat xd, xe, xt as the 3 categorical groups
-                out = model([xd, xe, xt], torch.empty(xd.size(0), 0).to(args.device))
+            if args.model_type == "crash_severity_net":
+                inputs = {'temporal': xt, 'weather': xw, 'road': xr, 'spatial': xs}
+                out = model(inputs)
+            elif args.model_type == "tab_transformer":
+                out = model([xt, xw, xr, xs], torch.empty(xt.size(0), 0).to(args.device))
+            elif args.model_type == "early_mlp":
+                # Concatenate for EarlyMLP
+                concat_input = torch.cat([xt, xw, xr, xs], dim=1)
+                out = model(concat_input)
             else:
-                out = model(xd, xe, xt)
+                # Should not happen
+                out = model(xt, xw, xr, xs)
                 
             loss = criterion(out, y)
             loss.backward()
@@ -239,15 +235,22 @@ def main():
         all_preds = []
         all_targets = []
         with torch.no_grad():
-            for xd, xe, xt, y in val_loader:
-                xd, xe, xt, y = xd.to(args.device), xe.to(args.device), xt.to(args.device), y.to(args.device)
+            for xt, xw, xr, xs, y in val_loader:
+                xt, xw, xr, xs, y = xt.to(args.device), xw.to(args.device), xr.to(args.device), xs.to(args.device), y.to(args.device)
+                
                 if args.model_type == "tab_transformer":
-                    out = model([xd, xe, xt], torch.empty(xd.size(0), 0).to(args.device))
+                    out = model([xt, xw, xr, xs], torch.empty(xt.size(0), 0).to(args.device))
+                elif args.model_type == "early_mlp":
+                    concat_input = torch.cat([xt, xw, xr, xs], dim=1)
+                    out = model(concat_input)
+                elif args.model_type == "crash_severity_net":
+                    inputs = {'temporal': xt, 'weather': xw, 'road': xr, 'spatial': xs}
+                    out = model(inputs)
                 else:
-                    out = model(xd, xe, xt)
+                    out = model(xt, xw, xr, xs)
+
                 loss = criterion(out, y)
                 val_loss += loss.item()
-                
                 preds = torch.argmax(out, dim=1)
                 all_preds.extend(preds.cpu().numpy())
                 all_targets.extend(y.cpu().numpy())
@@ -255,32 +258,43 @@ def main():
         avg_val_loss = val_loss / len(val_loader)
         val_metrics = evaluate_metrics(all_targets, all_preds)
         
-        print(f"Epoch {epoch+1}: Train Loss={avg_train_loss:.4f}, Val Loss={avg_val_loss:.4f}, Val Acc={val_metrics['accuracy']:.4f}")
+        print(f"Epoch {epoch+1}: Train Loss={avg_train_loss:.4f}, Val Loss={avg_val_loss:.4f}, Val Acc={val_metrics['accuracy']:.4f}, Macro F1={val_metrics['macro_f1']:.4f}")
         
         history.append({
             'epoch': epoch + 1,
             'train_loss': avg_train_loss,
-            'val_loss': avg_val_loss
+            'val_loss': avg_val_loss,
+            'val_acc': val_metrics['accuracy'],
+            'val_macro_f1': val_metrics['macro_f1']
         })
         
         # Save Best Model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), f"models/{experiment_name}.pt")
-            
-    # 9. Final Evaluation on Test Set
+            print(f"  Saved best model (Val Loss: {best_val_loss:.4f})")
+
+    # 9. Test Evaluation
     print("Evaluating on Test Set...")
     model.load_state_dict(torch.load(f"models/{experiment_name}.pt"))
     model.eval()
     test_preds = []
     test_targets = []
     with torch.no_grad():
-        for xd, xe, xt, y in test_loader:
-            xd, xe, xt, y = xd.to(args.device), xe.to(args.device), xt.to(args.device), y.to(args.device)
+        for xt, xw, xr, xs, y in test_loader:
+            xt, xw, xr, xs, y = xt.to(args.device), xw.to(args.device), xr.to(args.device), xs.to(args.device), y.to(args.device)
+            
             if args.model_type == "tab_transformer":
-                out = model([xd, xe, xt], torch.empty(xd.size(0), 0).to(args.device))
+                out = model([xt, xw, xr, xs], torch.empty(xt.size(0), 0).to(args.device))
+            elif args.model_type == "early_mlp":
+                concat_input = torch.cat([xt, xw, xr, xs], dim=1)
+                out = model(concat_input)
+            elif args.model_type == "crash_severity_net":
+                inputs = {'temporal': xt, 'weather': xw, 'road': xr, 'spatial': xs}
+                out = model(inputs)
             else:
-                out = model(xd, xe, xt)
+                out = model(xt, xw, xr, xs)
+                
             preds = torch.argmax(out, dim=1)
             test_preds.extend(preds.cpu().numpy())
             test_targets.extend(y.cpu().numpy())

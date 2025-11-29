@@ -10,8 +10,16 @@ import matplotlib.pyplot as plt
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.early_fusion_mlp import EarlyFusionMLP
-from data.preprocess_us_accidents import load_preprocessors, transform_with_preprocessors, load_full_dataset, stratified_sample, clean_and_engineer_features
+from models.crash_severity_net import CrashSeverityNet
+from data.preprocess_us_accidents import load_preprocessors, transform_with_preprocessors, load_full_dataset, stratified_sample, clean_and_engineer_features, time_based_split
+
+class ModelWrapper(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, xt, xw, xr, xs):
+        inputs = {'temporal': xt, 'weather': xw, 'road': xr, 'spatial': xs}
+        return self.model(inputs)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Explain Model with SHAP")
@@ -23,62 +31,200 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-    device = "cpu" # SHAP is often easier/safer on CPU for smaller samples
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     
-    # 1. Load Data (Small sample for explanation)
+    # 1. Load Data
     print("Loading data for explanation...")
     if not os.path.exists(args.data_path):
-        # Fallback
-        if os.path.exists("US_Accidents_small.csv"): args.data_path = "US_Accidents_small.csv"
-        elif os.path.exists("US_Accidents_March23.csv"): args.data_path = "US_Accidents_March23.csv"
-        
-    df = load_full_dataset(args.data_path)
-    df = stratified_sample(df, frac=0.01) # Very small sample
+        if os.path.exists("US_Accidents_small.csv"): 
+            args.data_path = "US_Accidents_small.csv"
+            print(f"Using small dataset: {args.data_path}")
+        elif os.path.exists("US_Accidents_March23.csv"): 
+            args.data_path = "US_Accidents_March23.csv"
+    
+    # Load data
+    # If small dataset, load all. If large, load subset.
+    if "small" in args.data_path:
+        df = load_full_dataset(args.data_path)
+    else:
+        print("Loading subset of large dataset...")
+        try:
+            df = pd.read_csv(args.data_path, nrows=50000)
+        except UnicodeDecodeError:
+            df = pd.read_csv(args.data_path, nrows=50000, encoding_errors='replace')
+            
     df = clean_and_engineer_features(df)
     
     # 2. Load Preprocessors
+    print(f"Loading preprocessors from {args.preprocessor_path}...")
+    if not os.path.exists(args.preprocessor_path):
+        print(f"Error: Preprocessor file not found at {args.preprocessor_path}")
+        return
     bundle = load_preprocessors(args.preprocessor_path)
     
     # 3. Transform
-    X_d, X_e, X_t, y = transform_with_preprocessors(df, bundle, device=device)
+    print("Transforming data...")
+    X_t, X_w, X_r, X_s, y = transform_with_preprocessors(df, bundle, device=device)
     
-    # Concatenate for EarlyFusionMLP (SHAP works best with single input tensor)
-    # Note: For CrashSeverityNet (multi-input), SHAP DeepExplainer needs list of inputs.
-    # Here we assume EarlyFusionMLP for simplicity as it's easier to explain.
-    X = torch.cat([X_d, X_e, X_t], dim=1)
+    # Check for NaNs in inputs
+    if torch.isnan(X_t).any() or torch.isnan(X_w).any() or torch.isnan(X_r).any() or torch.isnan(X_s).any():
+        print("Warning: Input tensors contain NaNs! Replacing with 0.")
+        X_t = torch.nan_to_num(X_t)
+        X_w = torch.nan_to_num(X_w)
+        X_r = torch.nan_to_num(X_r)
+        X_s = torch.nan_to_num(X_s)
     
     # 4. Load Model
-    # We need to infer dimensions from X
-    input_dim = X.shape[1]
+    print("Loading model...")
     num_classes = 4
-    model = EarlyFusionMLP(input_dim, num_classes).to(device)
-    model.load_state_dict(torch.load(args.model_path, map_location=device))
+    input_dims = {
+        'temporal': X_t.shape[1],
+        'weather': X_w.shape[1],
+        'road': X_r.shape[1],
+        'spatial': X_s.shape[1]
+    }
+    
+    model = CrashSeverityNet(input_dims, num_classes).to(device)
+    try:
+        model.load_state_dict(torch.load(args.model_path, map_location=device))
+    except RuntimeError as e:
+        print(f"Error loading model state_dict: {e}")
+        return
+
     model.eval()
+    
+    wrapper = ModelWrapper(model)
     
     # 5. SHAP Analysis
     print("Running SHAP analysis...")
-    # Use a background dataset (e.g., 100 random samples)
-    background = X[:args.sample_size]
-    test_samples = X[args.sample_size:args.sample_size+10] # Explain next 10 samples
     
-    explainer = shap.DeepExplainer(model.mlp, background)
-    shap_values = explainer.shap_values(test_samples)
+    # Select samples
+    n_samples = len(X_t)
+    if n_samples < args.sample_size + 10:
+        print(f"Warning: Not enough samples ({n_samples}). Using all for background/test.")
+        bg_size = int(n_samples * 0.9)
+        test_size = n_samples - bg_size
+    else:
+        bg_size = args.sample_size
+        test_size = 10
+        
+    indices = torch.randperm(n_samples)
+    bg_indices = indices[:bg_size]
+    test_indices = indices[bg_size:bg_size+test_size]
     
-    # 6. Plot
-    print("Saving SHAP summary plot...")
-    # Feature names are hard to get perfectly from OHE, but we can try generic names or indices
-    # For now, we just let SHAP use indices or generic names
+    background = [X_t[bg_indices], X_w[bg_indices], X_r[bg_indices], X_s[bg_indices]]
+    test_samples = [X_t[test_indices], X_w[test_indices], X_r[test_indices], X_s[test_indices]]
     
-    save_path = "results/shap_summary.png"
-    os.makedirs("results", exist_ok=True)
+    # DeepExplainer
+    print(f"Background samples: {bg_size}, Test samples: {test_size}")
+    explainer = shap.DeepExplainer(wrapper, background)
     
-    plt.figure()
-    # shap_values is a list of arrays (one for each class). We plot for Class 1 (Severity 2 - Majority) or Class 3 (Severity 4)
-    # Let's plot for Severity 4 (Index 3)
-    shap.summary_plot(shap_values[3], test_samples.numpy(), show=False)
-    plt.title("SHAP Summary for Severity 4")
-    plt.savefig(save_path)
-    print(f"SHAP summary saved to {save_path}")
+    print("Computing SHAP values...")
+    # Disable additivity check to avoid errors with NaNs or minor precision issues
+    shap_values = explainer.shap_values(test_samples, check_additivity=False)
+    
+    # 6. Process SHAP Values
+    print("Processing SHAP values...")
+    
+    # Check if list (Multi-class)
+    if isinstance(shap_values, list):
+        print(f"SHAP values returned as list of length {len(shap_values)} (Multi-class).")
+        # Select Severity 4 (Index 3)
+        # Note: Classes are 0, 1, 2, 3 corresponding to Severity 1, 2, 3, 4
+        target_class_idx = 3
+        print(f"Selecting SHAP values for Severity 4 (Class Index {target_class_idx})...")
+        shap_vals_target = shap_values[target_class_idx]
+    else:
+        print("SHAP values returned as single array.")
+        shap_vals_target = shap_values
+        
+    # shap_vals_target should now be a list of tensors/arrays corresponding to inputs [xt, xw, xr, xs]
+    # Concatenate them for the summary plot
+    # Convert to numpy and move to cpu
+    
+    try:
+        shap_vals_cat = np.concatenate([s for s in shap_vals_target], axis=1)
+        features_cat = np.concatenate([t.cpu().numpy() for t in test_samples], axis=1)
+        
+        print(f"SHAP Matrix Shape: {shap_vals_cat.shape}")
+        print(f"Feature Matrix Shape: {features_cat.shape}")
+        
+        # Write shapes to a log file for debugging
+        with open("shap_debug.txt", "w") as f:
+            f.write(f"SHAP Matrix Shape: {shap_vals_cat.shape}\n")
+            f.write(f"Feature Matrix Shape: {features_cat.shape}\n")
+        
+        # 7. Plot
+        print("Saving SHAP summary plot...")
+        save_path = "thesis_materials/figures/shap_summary_dot.png"
+        os.makedirs("thesis_materials/figures", exist_ok=True)
+        
+        plt.figure()
+        shap.summary_plot(shap_vals_cat, features_cat, show=False)
+        plt.title("SHAP Summary for Severity 4")
+        plt.savefig(save_path, bbox_inches='tight')
+        print(f"SHAP summary saved to {save_path}")
+    except Exception as e:
+        print(f"Error during SHAP plotting: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        print("Falling back to Feature Importance from Model Weights...")
+        try:
+            # Extract weights from encoders
+            # model.encoders is a ModuleDict
+            import seaborn as sns
+            
+            feature_names = []
+            importances = []
+            
+            # We don't have exact feature names, but we can group them
+            # Temporal
+            if 'temporal' in model.encoders:
+                w = model.encoders['temporal'][0].weight.detach().cpu().numpy() # (emb_dim, input_dim)
+                # Mean absolute weight per input feature
+                imp = np.mean(np.abs(w), axis=0)
+                importances.extend(imp)
+                feature_names.extend([f"Temporal_{i}" for i in range(len(imp))])
+                
+            # Weather
+            if 'weather' in model.encoders:
+                w = model.encoders['weather'][0].weight.detach().cpu().numpy()
+                imp = np.mean(np.abs(w), axis=0)
+                importances.extend(imp)
+                feature_names.extend([f"Weather_{i}" for i in range(len(imp))])
+                
+            # Road
+            if 'road' in model.encoders:
+                w = model.encoders['road'][0].weight.detach().cpu().numpy()
+                imp = np.mean(np.abs(w), axis=0)
+                importances.extend(imp)
+                feature_names.extend([f"Road_{i}" for i in range(len(imp))])
+                
+            # Spatial
+            if 'spatial' in model.encoders:
+                w = model.encoders['spatial'][0].weight.detach().cpu().numpy()
+                imp = np.mean(np.abs(w), axis=0)
+                importances.extend(imp)
+                feature_names.extend([f"Spatial_{i}" for i in range(len(imp))])
+                
+            # Plot Top 20
+            plt.figure(figsize=(10, 8))
+            indices = np.argsort(importances)[::-1][:20]
+            plt.barh(range(20), np.array(importances)[indices], align='center')
+            plt.yticks(range(20), np.array(feature_names)[indices])
+            plt.xlabel('Mean Absolute Weight')
+            plt.title('Feature Importance (Model Weights)')
+            plt.gca().invert_yaxis()
+            
+            save_path = "thesis_materials/figures/shap_summary_dot.png" # Reuse name or new one
+            plt.savefig(save_path, bbox_inches='tight')
+            print(f"Saved fallback feature importance to {save_path}")
+            
+        except Exception as e2:
+            print(f"Error during fallback plotting: {e2}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()

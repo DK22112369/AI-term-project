@@ -71,12 +71,13 @@ def main():
     
     print("Transforming datasets...")
     # Note: We use CPU for sklearn models
-    X_d_train, X_e_train, X_t_train, y_train = transform_with_preprocessors(df_train, bundle, device='cpu')
-    X_d_test,  X_e_test,  X_t_test,  y_test  = transform_with_preprocessors(df_test,  bundle, device='cpu')
+    # Returns: Temporal, Weather, Road, Spatial, Targets
+    X_t_train, X_w_train, X_r_train, X_s_train, y_train = transform_with_preprocessors(df_train, bundle, device='cpu')
+    X_t_test,  X_w_test,  X_r_test,  X_s_test,  y_test  = transform_with_preprocessors(df_test,  bundle, device='cpu')
     
     # Concatenate features for ML models
-    X_train = np.concatenate([X_d_train.numpy(), X_e_train.numpy(), X_t_train.numpy()], axis=1)
-    X_test = np.concatenate([X_d_test.numpy(), X_e_test.numpy(), X_t_test.numpy()], axis=1)
+    X_train = np.concatenate([X_t_train.numpy(), X_w_train.numpy(), X_r_train.numpy(), X_s_train.numpy()], axis=1)
+    X_test = np.concatenate([X_t_test.numpy(), X_w_test.numpy(), X_r_test.numpy(), X_s_test.numpy()], axis=1)
     y_train = y_train.numpy()
     y_test = y_test.numpy()
     

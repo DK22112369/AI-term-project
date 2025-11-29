@@ -88,12 +88,12 @@ def main():
         bundle = fit_feature_transformers(df_train)
         
         # Transform
-        X_d_train, X_e_train, X_t_train, y_train_t = transform_with_preprocessors(df_train, bundle, device='cpu')
-        X_d_val, X_e_val, X_t_val, y_val_t = transform_with_preprocessors(df_val, bundle, device='cpu')
+        X_t_train, X_w_train, X_r_train, X_s_train, y_train_t = transform_with_preprocessors(df_train, bundle, device='cpu')
+        X_t_val, X_w_val, X_r_val, X_s_val, y_val_t = transform_with_preprocessors(df_val, bundle, device='cpu')
         
         # Concatenate for ML models
-        X_train_np = np.concatenate([X_d_train.numpy(), X_e_train.numpy(), X_t_train.numpy()], axis=1)
-        X_val_np = np.concatenate([X_d_val.numpy(), X_e_val.numpy(), X_t_val.numpy()], axis=1)
+        X_train_np = np.concatenate([X_t_train.numpy(), X_w_train.numpy(), X_r_train.numpy(), X_s_train.numpy()], axis=1)
+        X_val_np = np.concatenate([X_t_val.numpy(), X_w_val.numpy(), X_r_val.numpy(), X_s_val.numpy()], axis=1)
         y_train_np = y_train_t.numpy()
         y_val_np = y_val_t.numpy()
         

@@ -45,10 +45,14 @@ class ValueNetwork(nn.Module):
 class PPOAgent:
     def __init__(self, state_dim, action_dim, config):
         self.device = config.device
-        self.policy_net = PolicyNetwork(state_dim, action_dim).to(self.device)
-        # log_std parameterized as independent per action dim
-        self.log_std = nn.Parameter(torch.zeros(action_dim, dtype=torch.float32, device=self.device))
-        self.value_net = ValueNetwork(state_dim).to(self.device)
+        # use hidden sizes from config if provided
+        policy_hidden = getattr(config, "policy_hidden_sizes", (64, 64))
+        value_hidden = getattr(config, "value_hidden_sizes", (64, 64))
+        self.policy_net = PolicyNetwork(state_dim, action_dim, hidden_sizes=policy_hidden).to(self.device)
+        # log_std parameterized as independent per action dim; initialize from config
+        init_log_std = getattr(config, "policy_log_std_init", -0.5)
+        self.log_std = nn.Parameter(torch.ones(action_dim, dtype=torch.float32, device=self.device) * init_log_std)
+        self.value_net = ValueNetwork(state_dim, hidden_sizes=value_hidden).to(self.device)
 
         self.policy_optimizer = torch.optim.Adam(list(self.policy_net.parameters()) + [self.log_std], lr=config.policy_lr)
         self.value_optimizer = torch.optim.Adam(self.value_net.parameters(), lr=config.value_lr)

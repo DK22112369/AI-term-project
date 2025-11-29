@@ -40,18 +40,14 @@ class EarlyFusionMLP(nn.Module):
         
         self.mlp = nn.Sequential(*layers)
 
-    def forward(self, xd, xe, xt):
+    def forward(self, x):
         """
         Forward pass.
         
         Args:
-            xd (torch.Tensor): Driver features.
-            xe (torch.Tensor): Environment features.
-            xt (torch.Tensor): Time/Location features.
+            x (torch.Tensor): Concatenated input features.
             
         Returns:
             torch.Tensor: Logits.
         """
-        # Early Fusion: Concatenate inputs first
-        x = torch.cat((xd, xe, xt), dim=1)
         return self.mlp(x)

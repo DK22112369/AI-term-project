@@ -54,45 +54,61 @@ def main():
     # But transform_with_preprocessors expects Severity for y.
     # Let's manually transform X.
     
-    X_driver = bundle["driver_preprocessor"].transform(df[bundle["driver_features"]])
-    X_env = bundle["env_preprocessor"].transform(df[bundle["env_features"]])
-    X_time = bundle["time_preprocessor"].transform(df[bundle["time_features"]])
+    def transform_group(group_name):
+        preprocessor = bundle.get(f"{group_name}_preprocessor")
+        features = bundle.get(f"{group_name}_features")
+        if preprocessor and features:
+            # Ensure columns exist
+            for col in features:
+                if col not in df.columns:
+                    df[col] = 0 # Default value
+            X = preprocessor.transform(df[features])
+            return X.toarray() if hasattr(X, 'toarray') else X
+        return np.zeros((len(df), 0))
+
+    X_temporal = transform_group("temporal")
+    X_weather = transform_group("weather")
+    X_road = transform_group("road")
+    X_spatial = transform_group("spatial")
     
-    def to_dense(x): return x.toarray() if hasattr(x, 'toarray') else x
-    X_driver = to_dense(X_driver)
-    X_env = to_dense(X_env)
-    X_time = to_dense(X_time)
-    
-    X_d_t = torch.tensor(X_driver.astype(np.float32)).to(device)
-    X_e_t = torch.tensor(X_env.astype(np.float32)).to(device)
-    X_t_t = torch.tensor(X_time.astype(np.float32)).to(device)
+    X_t_t = torch.tensor(X_temporal.astype(np.float32)).to(device)
+    X_w_t = torch.tensor(X_weather.astype(np.float32)).to(device)
+    X_r_t = torch.tensor(X_road.astype(np.float32)).to(device)
+    X_s_t = torch.tensor(X_spatial.astype(np.float32)).to(device)
     
     # 3. Load Model
     # We need dimensions. 
-    # Ideally these should be saved in config, but we can infer from preprocessors if we trust they match.
-    # Or we can load the model state dict and check shapes (harder).
-    # For this script, we assume the dimensions match the transformed data.
-    d_in = X_d_t.shape[1]
-    e_in = X_e_t.shape[1]
     t_in = X_t_t.shape[1]
+    w_in = X_w_t.shape[1]
+    r_in = X_r_t.shape[1]
+    s_in = X_s_t.shape[1]
     num_classes = 4
     
     if args.model_type == "crash_severity_net":
-        model = CrashSeverityNet(d_in, e_in, t_in, num_classes).to(device)
+        input_dims = {
+            'temporal': t_in,
+            'weather': w_in,
+            'road': r_in,
+            'spatial': s_in
+        }
+        model = CrashSeverityNet(input_dims, num_classes).to(device)
         model.load_state_dict(torch.load(args.model_path, map_location=device))
         model.eval()
         with torch.no_grad():
-            logits = model(X_d_t, X_e_t, X_t_t)
+            inputs = {'temporal': X_t_t, 'weather': X_w_t, 'road': X_r_t, 'spatial': X_s_t}
+            logits = model(inputs)
             probs = torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1) + 1 # 1-based Severity
             
     elif args.model_type == "early_mlp":
-        input_dim = d_in + e_in + t_in
+        input_dim = t_in + w_in + r_in + s_in
         model = EarlyFusionMLP(input_dim, num_classes).to(device)
         model.load_state_dict(torch.load(args.model_path, map_location=device))
         model.eval()
         with torch.no_grad():
-            logits = model(X_d_t, X_e_t, X_t_t)
+            # Concatenate
+            concat_input = torch.cat([X_t_t, X_w_t, X_r_t, X_s_t], dim=1)
+            logits = model(concat_input)
             probs = torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1) + 1
             
