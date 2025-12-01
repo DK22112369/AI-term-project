@@ -1,0 +1,84 @@
+{
+    "config": {
+        "data_path": "data/raw/US_Accidents_March23.csv",
+        "sample_frac": 0.1,
+        "epochs": 20,
+        "batch_size": 64,
+        "lr": 0.001,
+        "device": "cuda",
+        "model_type": "crash_severity_net",
+        "loss_type": "ce",
+        "use_sampler": true,
+        "gamma": 2.0
+    },
+    "metrics": {
+        "accuracy": 0.5719058759560144,
+        "macro_f1": 0.41567089191286755,
+        "weighted_f1": 0.6305707295313933,
+        "classification_report": {
+            "0": {
+                "precision": 0.16014947284131856,
+                "recall": 0.89086859688196,
+                "f1-score": 0.27149321266968324,
+                "support": 1347.0
+            },
+            "1": {
+                "precision": 0.9493269727953564,
+                "recall": 0.5233996376711636,
+                "f1-score": 0.6747720725099885,
+                "support": 108741.0
+            },
+            "2": {
+                "precision": 0.4122028009988058,
+                "recall": 0.7306034482758621,
+                "f1-score": 0.5270478490817474,
+                "support": 25984.0
+            },
+            "3": {
+                "precision": 0.10802375152253349,
+                "recall": 0.7668197784382599,
+                "f1-score": 0.18937043339005105,
+                "support": 3701.0
+            },
+            "accuracy": 0.5719058759560144,
+            "macro avg": {
+                "precision": 0.40742574953950356,
+                "recall": 0.7279228653168114,
+                "f1-score": 0.41567089191286755,
+                "support": 139773.0
+            },
+            "weighted avg": {
+                "precision": 0.8195929054552379,
+                "recall": 0.5719058759560144,
+                "f1-score": 0.6305707295313933,
+                "support": 139773.0
+            }
+        },
+        "confusion_matrix": [
+            [
+                1200,
+                43,
+                80,
+                24
+            ],
+            [
+                4796,
+                56915,
+                26807,
+                20223
+            ],
+            [
+                1368,
+                2445,
+                18984,
+                3187
+            ],
+            [
+                129,
+                550,
+                184,
+                2838
+            ]
+        ]
+    }
+}

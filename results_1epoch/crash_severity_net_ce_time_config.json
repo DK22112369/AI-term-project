@@ -1,0 +1,14 @@
+{
+    "data_path": "data/raw/US_Accidents_March23.csv",
+    "sample_frac": 0.001,
+    "epochs": 1,
+    "batch_size": 64,
+    "lr": 0.001,
+    "device": "cuda",
+    "seed": 42,
+    "model_type": "crash_severity_net",
+    "loss_type": "ce",
+    "use_sampler": false,
+    "gamma": 2.0,
+    "split_strategy": "time"
+}

@@ -1,0 +1,30 @@
+{
+    "description": "Fail-Safe Optimized Model (Severity 4 Boost)",
+    "loss_type": "focal",
+    "alpha": [
+        0.10,
+        0.10,
+        0.20,
+        0.50
+    ],
+    "gamma": 2.0,
+    "use_class_weight": true,
+    "sev4_boost_factor": 2.5,
+    "lr": 0.0005,
+    "batch_size": 4096,
+    "epochs": 100,
+    "patience": 10,
+    "val_freq": 1,
+    "threshold_list": [
+        0.10,
+        0.15,
+        0.20,
+        0.25,
+        0.29,
+        0.33,
+        0.37,
+        0.40,
+        0.45,
+        0.50
+    ]
+}

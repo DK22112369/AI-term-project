@@ -46,29 +46,6 @@ Python 3.8 이상 환경에서 실행하는 것을 권장합니다.
    # Mac/Linux
    source .venv/bin/activate
    ```
-
-2. **의존성 패키지 설치**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## 💻 실행 방법 (Usage)
-
-모든 스크립트는 프로젝트 루트 디렉토리에서 실행해야 합니다.
-
-### 1. 모델 학습 (Training)
-기본 `CrashSeverityNet` 모델을 학습합니다.
-```bash
-python scripts/train.py --model_type crash_severity_net --epochs 10 --batch_size 256
-```
-*옵션:*
-- `--loss_type`: `ce` (CrossEntropy), `focal` (Focal Loss), `ce_weighted` (Weighted CE)
-- `--split_strategy`: `time` (시간순 분할), `random` (무작위 분할)
-
-### 2. 모델 평가 (Evaluation)
-K-Fold 교차 검증을 수행하여 모델의 일반화 성능을 평가합니다.
-```bash
-python scripts/evaluate_kfold.py --folds 5 --model_type rf
 ```
 
 ### 3. 임계값 보정 (Threshold Calibration)
@@ -90,3 +67,14 @@ python scripts/plot_thesis_figures.py
 
 ## 📝 라이선스
 이 프로젝트는 학술 연구 목적으로 작성되었습니다.
+
+## 📅 Publication & Research Plan
+본 프로젝트는 **"불균형 데이터 환경에서의 Fail-Safe 교통사고 심각도 예측"**을 주제로 한 연구입니다.
+
+- **Current Status (Mk.2)**: 
+    - KSAE(한국자동차공학회) 학술대회 투고 준비 중 (8쪽 Full Paper).
+    - 핵심 기여: Group-wise Late Fusion 아키텍처 + Safety-Critical Loss 설계.
+- **Future Roadmap**:
+    - **Short-term**: SHAP 기반 설명 가능성(XAI) 분석 고도화.
+    - **Long-term**: IF 7~10급 국제 저널(IEEE T-ITS, ESWA) 투고를 위한 멀티모달(Text+Tabular) 확장 및 다중 데이터셋 검증.
+

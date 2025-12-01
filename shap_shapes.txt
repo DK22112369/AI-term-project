@@ -1,0 +1,3 @@
+X_test_shap shape: (20, 69)
+Feature names length: 69
+shap_values shape: (20, 69, 4)

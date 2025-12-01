@@ -1,0 +1,40 @@
+{
+    "description": "Imbalance Handling and Fail-Safe Strategy Comparison",
+    "common_args": {
+        "sample_frac": 0.1,
+        "split_strategy": "time",
+        "seed": 42,
+        "epochs": 20,
+        "model_type": "crash_severity_net"
+    },
+    "experiments": [
+        {
+            "id": "csn_ce_base",
+            "loss_type": "ce"
+        },
+        {
+            "id": "csn_ce_weighted",
+            "loss_type": "ce_weighted"
+        },
+        {
+            "id": "csn_focal_g2",
+            "loss_type": "focal",
+            "gamma": 2.0
+        },
+        {
+            "id": "csn_ce_sampler",
+            "loss_type": "ce",
+            "use_sampler": true
+        },
+        {
+            "id": "csn_ce_weighted_sampler",
+            "loss_type": "ce_weighted",
+            "use_sampler": true
+        },
+        {
+            "id": "csn_focal_sampler",
+            "loss_type": "focal",
+            "use_sampler": true
+        }
+    ]
+}

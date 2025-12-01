@@ -1,0 +1,90 @@
+{
+    "config": {
+        "data_path": "data/raw/US_Accidents_March23.csv",
+        "sample_frac": 0.1,
+        "epochs": 1,
+        "batch_size": 128,
+        "lr": 0.001,
+        "device": "cuda",
+        "seed": 42,
+        "split_strategy": "time",
+        "model_type": "early_mlp",
+        "loss_type": "ce_weighted",
+        "use_sampler": false,
+        "use_smote": false,
+        "gamma": 2.0,
+        "exp_id": "early_mlp_official"
+    },
+    "metrics": {
+        "accuracy": 0.17320941812796462,
+        "macro_f1": 0.1714028718285305,
+        "weighted_f1": 0.2291769018232893,
+        "macro_f2": 0.213743866614455,
+        "classification_report": {
+            "0": {
+                "precision": 0.07320065953449136,
+                "recall": 0.5070385126162018,
+                "f1-score": 0.12793191261225037,
+                "support": 3765.0
+            },
+            "1": {
+                "precision": 0.9006816487378848,
+                "recall": 0.13504471414883423,
+                "f1-score": 0.23487341860045272,
+                "support": 125240.0
+            },
+            "2": {
+                "precision": 0.19822135760439102,
+                "recall": 0.38805767138193686,
+                "f1-score": 0.2624051506093355,
+                "support": 7352.0
+            },
+            "3": {
+                "precision": 0.031481688461681756,
+                "recall": 0.742096018735363,
+                "f1-score": 0.060401005492083534,
+                "support": 3416.0
+            },
+            "accuracy": 0.17320941812796462,
+            "macro avg": {
+                "precision": 0.30089633858461223,
+                "recall": 0.44305922922058394,
+                "f1-score": 0.1714028718285305,
+                "support": 139773.0
+            },
+            "weighted avg": {
+                "precision": 0.8202001462369173,
+                "recall": 0.17320941812796462,
+                "f1-score": 0.2291769018232893,
+                "support": 139773.0
+            }
+        },
+        "confusion_matrix": [
+            [
+                1909,
+                897,
+                835,
+                124
+            ],
+            [
+                20871,
+                16913,
+                10474,
+                76982
+            ],
+            [
+                2990,
+                627,
+                2853,
+                882
+            ],
+            [
+                309,
+                341,
+                231,
+                2535
+            ]
+        ],
+        "roc_auc": 0.6497564538216154
+    }
+}

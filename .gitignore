@@ -25,12 +25,22 @@ checkpoints/
 *.pkl
 
 # --- Experimental results / logs ---
-results/
-logs/
-wandb/
-mlruns/
-tensorboard/
+# results/ (Commented out to allow selective inclusion)
+# logs/
+# wandb/
+# mlruns/
+# tensorboard/
 *.npz
+
+# Ignore everything in results by default
+results/*
+!results/*.png
+!results/*.json
+!results/*.csv
+!results/pareto/
+!results/shap_fatal/
+!results/calibration/
+!results/sev4_boost/
 
 # --- Secret information / environment files ---
 *.env

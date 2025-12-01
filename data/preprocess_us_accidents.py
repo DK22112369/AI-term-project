@@ -87,6 +87,9 @@ def clean_and_engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df['Start_Time'] = pd.to_datetime(df['Start_Time'], errors='coerce')
     df['End_Time'] = pd.to_datetime(df['End_Time'], errors='coerce')
     
+    # Drop rows with invalid Start_Time
+    df = df.dropna(subset=['Start_Time'])
+    
     # Extract Temporal Features
     df['Start_Hour'] = df['Start_Time'].dt.hour
     df['Start_DayOfWeek'] = df['Start_Time'].dt.dayofweek

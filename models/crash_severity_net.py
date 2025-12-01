@@ -100,3 +100,17 @@ class CrashSeverityNet(nn.Module):
         
         # Final prediction
         return self.fusion_mlp(concat)
+
+def infer_input_dims(state_dict):
+    """
+    Infers input dimensions from a state_dict.
+    """
+    input_dims = {}
+    for key in state_dict.keys():
+        if key.startswith("encoders.") and key.endswith(".net.0.weight"):
+            # key format: encoders.<group_name>.net.0.weight
+            parts = key.split('.')
+            group_name = parts[1]
+            dim = state_dict[key].shape[1]
+            input_dims[group_name] = dim
+    return input_dims

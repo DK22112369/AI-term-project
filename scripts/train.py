@@ -46,8 +46,12 @@ def parse_arguments():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--split_strategy", type=str, default="random",
-                        choices=["random", "time"],
-                        help="Data splitting strategy: random (stratified) or time (chronological)")
+                        choices=["random", "time", "region"],
+                        help="Data splitting strategy: random (stratified), time (chronological), or region")
+    parser.add_argument("--region_a_states", type=str, nargs='+', default=["CA", "OR", "WA", "NV", "AZ"],
+                        help="List of states for Region A (Train/Val)")
+    parser.add_argument("--region_b_states", type=str, nargs='+', default=["NY", "PA", "OH", "MI", "IL"],
+                        help="List of states for Region B (Test)")
     parser.add_argument("--model_type", type=str, default="crash_severity_net",
                         choices=["crash_severity_net", "early_mlp", "tab_transformer"],
                         help="Model architecture")
@@ -57,6 +61,7 @@ def parse_arguments():
     parser.add_argument("--use_sampler", action="store_true", help="Use WeightedRandomSampler")
     parser.add_argument("--use_smote", action="store_true", help="Use SMOTE-NC (Only for early_mlp/tab_transformer)")
     parser.add_argument("--gamma", type=float, default=2.0, help="Gamma for Focal Loss")
+    parser.add_argument("--exp_id", type=str, default=None, help="Experiment ID for output filenames")
     return parser.parse_args()
 
 def get_class_weights(y, device):
@@ -80,6 +85,16 @@ def main():
     set_seed(args.seed)
     print(f"Starting experiment: {args.model_type}, Loss: {args.loss_type}, Split: {args.split_strategy}")
     
+    # Define Run Name
+    if args.exp_id:
+        run_name = args.exp_id
+    else:
+        run_name = f"{args.model_type}_{args.loss_type}"
+        if args.use_sampler: run_name += "_sampler"
+        if args.use_smote: run_name += "_smote"
+        if args.split_strategy == "time": run_name += "_time"
+    print(f"Run Name: {run_name}")
+
     # 1. Load Data
     if not os.path.exists(args.data_path):
         # Fallback for testing
@@ -96,27 +111,51 @@ def main():
     df = clean_and_engineer_features(df)
     
     # 2. Split Data
-    if args.split_strategy == "random":
-        print("Splitting data (Stratified Random)...")
-        from sklearn.model_selection import train_test_split
-        df_train, df_test = train_test_split(df, test_size=0.2, random_state=args.seed, stratify=df["Severity"])
-        df_train, df_val = train_test_split(df_train, test_size=0.125, random_state=args.seed, stratify=df_train["Severity"]) # 0.125 * 0.8 = 0.1
-    else:
+    if args.split_strategy == "time":
         print("Splitting data (Time-based)...")
         df_train, df_val, df_test = time_based_split(df)
-    
+    elif args.split_strategy == "region":
+        print(f"Splitting data (Region-based)...")
+        print(f"Region A (Train/Val): {args.region_a_states}")
+        print(f"Region B (Test): {args.region_b_states}")
+        
+        # Filter by State
+        # Ensure State column exists (it should, based on previous check)
+        if 'State' not in df.columns:
+            raise ValueError("Dataset missing 'State' column, cannot use region split.")
+            
+        df_region_a = df[df['State'].isin(args.region_a_states)]
+        df_region_b = df[df['State'].isin(args.region_b_states)]
+        
+        print(f"Region A samples: {len(df_region_a)}")
+        print(f"Region B samples: {len(df_region_b)}")
+        
+        if len(df_region_a) == 0 or len(df_region_b) == 0:
+             raise ValueError("One of the regions has 0 samples. Check state codes.")
+
+        # Test set is purely Region B
+        df_test = df_region_b
+        
+        # Train/Val split from Region A (Stratified)
+        from sklearn.model_selection import train_test_split
+        df_train, df_val = train_test_split(df_region_a, test_size=0.2, random_state=args.seed, stratify=df_region_a["Severity"])
+        
+    else:
+        print("Splitting data (Stratified Random)...")
+        from sklearn.model_selection import train_test_split
+        # First split: Train+Val vs Test
+        df_temp, df_test = train_test_split(df, test_size=0.2, random_state=args.seed, stratify=df["Severity"])
+        # Second split: Train vs Val
+        df_train, df_val = train_test_split(df_temp, test_size=0.125, random_state=args.seed, stratify=df_temp["Severity"]) # 0.125 * 0.8 = 0.1
+
     # 3. Fit Transformers
     bundle = fit_feature_transformers(df_train)
     
     # Save Preprocessors
-    experiment_name = f"{args.model_type}_{args.loss_type}"
-    if args.use_sampler: experiment_name += "_sampler"
-    if args.use_smote: experiment_name += "_smote"
-    if args.split_strategy == "time": experiment_name += "_time"
-    save_preprocessors(bundle, f"models/{experiment_name}_preprocessors.joblib")
+    os.makedirs("models", exist_ok=True)
+    save_preprocessors(bundle, f"models/{run_name}_preprocessors.joblib")
     
     print("Transforming datasets...")
-    # Returns: Temporal, Weather, Road, Spatial, Targets
     X_t_train, X_w_train, X_r_train, X_s_train, y_train = transform_with_preprocessors(df_train, bundle, args.device)
     X_t_val, X_w_val, X_r_val, X_s_val, y_val = transform_with_preprocessors(df_val, bundle, args.device)
     X_t_test, X_w_test, X_r_test, X_s_test, y_test = transform_with_preprocessors(df_test, bundle, args.device)
@@ -239,6 +278,7 @@ def main():
         model.eval()
         val_loss = 0
         all_preds = []
+        all_probs = []
         all_targets = []
         with torch.no_grad():
             for xt, xw, xr, xs, y in val_loader:
@@ -257,12 +297,17 @@ def main():
 
                 loss = criterion(out, y)
                 val_loss += loss.item()
+                
+                # Get probs and preds
+                probs = torch.softmax(out, dim=1)
                 preds = torch.argmax(out, dim=1)
+                
+                all_probs.extend(probs.cpu().numpy())
                 all_preds.extend(preds.cpu().numpy())
                 all_targets.extend(y.cpu().numpy())
         
         avg_val_loss = val_loss / len(val_loader)
-        val_metrics = evaluate_metrics(all_targets, all_preds)
+        val_metrics = evaluate_metrics(all_targets, all_preds, y_probs=all_probs)
         
         print(f"Epoch {epoch+1}: Train Loss={avg_train_loss:.4f}, Val Loss={avg_val_loss:.4f}, Val Acc={val_metrics['accuracy']:.4f}, Macro F1={val_metrics['macro_f1']:.4f}")
         
@@ -277,14 +322,15 @@ def main():
         # Save Best Model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), f"models/{experiment_name}.pt")
+            torch.save(model.state_dict(), f"models/{run_name}.pt")
             print(f"  Saved best model (Val Loss: {best_val_loss:.4f})")
 
     # 9. Test Evaluation
     print("Evaluating on Test Set...")
-    model.load_state_dict(torch.load(f"models/{experiment_name}.pt"))
+    model.load_state_dict(torch.load(f"models/{run_name}.pt"))
     model.eval()
     test_preds = []
+    test_probs = []
     test_targets = []
     with torch.no_grad():
         for xt, xw, xr, xs, y in test_loader:
@@ -301,26 +347,31 @@ def main():
             else:
                 out = model(xt, xw, xr, xs)
                 
+            # Get probs and preds
+            probs = torch.softmax(out, dim=1)
             preds = torch.argmax(out, dim=1)
+            
+            test_probs.extend(probs.cpu().numpy())
             test_preds.extend(preds.cpu().numpy())
             test_targets.extend(y.cpu().numpy())
             
-    test_metrics = evaluate_metrics(test_targets, test_preds)
+    test_metrics = evaluate_metrics(test_targets, test_preds, y_probs=test_probs)
     print("\nTest Set Results:")
     print(test_metrics['classification_report'])
     
     # 10. Save Results
-    config_path = f"results/{experiment_name}_config.json"
+    os.makedirs("results", exist_ok=True)
+    config_path = f"results/{run_name}_config.json"
     with open(config_path, 'w') as f:
         json.dump(vars(args), f, indent=4)
         
-    save_metrics(test_metrics, vars(args), f"results/{experiment_name}.json")
+    save_metrics(test_metrics, vars(args), f"results/{run_name}.json")
     
     plot_confusion_matrix(test_metrics['confusion_matrix'], classes=["1", "2", "3", "4"],
                           title=f"Confusion Matrix ({args.model_type})",
-                          save_path=f"results/confmat_{experiment_name}.png")
+                          save_path=f"results/confmat_{run_name}.png")
                           
-    plot_loss_curve(history, save_path=f"results/loss_curve_{experiment_name}.png")
+    plot_loss_curve(history, save_path=f"results/loss_curve_{run_name}.png")
     print("Experiment complete.")
 
 if __name__ == "__main__":

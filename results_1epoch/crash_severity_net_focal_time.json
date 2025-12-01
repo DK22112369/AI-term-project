@@ -1,0 +1,87 @@
+{
+    "config": {
+        "data_path": "US_Accidents_small.csv",
+        "sample_frac": 0.1,
+        "epochs": 5,
+        "batch_size": 128,
+        "lr": 0.001,
+        "device": "cuda",
+        "seed": 42,
+        "split_strategy": "time",
+        "model_type": "crash_severity_net",
+        "loss_type": "focal",
+        "use_sampler": false,
+        "use_smote": false,
+        "gamma": 2.0
+    },
+    "metrics": {
+        "accuracy": 0.04721862871927555,
+        "macro_f1": 0.04322904696621249,
+        "weighted_f1": 0.05850829069691794,
+        "classification_report": {
+            "0": {
+                "precision": 0.015209125475285171,
+                "recall": 0.5925925925925926,
+                "f1-score": 0.029657089898053754,
+                "support": 27.0
+            },
+            "1": {
+                "precision": 0.8823529411764706,
+                "recall": 0.030800821355236138,
+                "f1-score": 0.05952380952380952,
+                "support": 1461.0
+            },
+            "2": {
+                "precision": 0.015873015873015872,
+                "recall": 0.1,
+                "f1-score": 0.0273972602739726,
+                "support": 20.0
+            },
+            "3": {
+                "precision": 0.031545741324921134,
+                "recall": 0.2631578947368421,
+                "f1-score": 0.056338028169014086,
+                "support": 38.0
+            },
+            "accuracy": 0.04721862871927555,
+            "macro avg": {
+                "precision": 0.2362452059624232,
+                "recall": 0.24663782717116767,
+                "f1-score": 0.04322904696621249,
+                "support": 1546.0
+            },
+            "weighted avg": {
+                "precision": 0.8350869934893036,
+                "recall": 0.04721862871927555,
+                "f1-score": 0.05850829069691794,
+                "support": 1546.0
+            }
+        },
+        "confusion_matrix": [
+            [
+                16,
+                4,
+                3,
+                4
+            ],
+            [
+                997,
+                45,
+                120,
+                299
+            ],
+            [
+                14,
+                0,
+                2,
+                4
+            ],
+            [
+                25,
+                2,
+                1,
+                10
+            ]
+        ]
+    }
+}

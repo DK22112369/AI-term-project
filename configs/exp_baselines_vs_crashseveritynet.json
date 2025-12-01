@@ -1,0 +1,29 @@
+{
+    "description": "Comparison between Tree-based Baselines and CrashSeverityNet (Late Fusion)",
+    "common_args": {
+        "sample_frac": 0.1,
+        "split_strategy": "time",
+        "seed": 42,
+        "epochs": 20
+    },
+    "experiments": [
+        {
+            "id": "baseline_catboost_time",
+            "model_type": "catboost"
+        },
+        {
+            "id": "baseline_rf_time",
+            "model_type": "rf"
+        },
+        {
+            "id": "crash_severity_net_weighted_time",
+            "model_type": "crash_severity_net",
+            "loss_type": "ce_weighted"
+        },
+        {
+            "id": "early_mlp_weighted_time",
+            "model_type": "early_mlp",
+            "loss_type": "ce_weighted"
+        }
+    ]
+}

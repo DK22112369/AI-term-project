@@ -1,0 +1,15 @@
+{
+    "data_path": "US_Accidents_small.csv",
+    "sample_frac": 0.1,
+    "epochs": 5,
+    "batch_size": 128,
+    "lr": 0.001,
+    "device": "cuda",
+    "seed": 42,
+    "split_strategy": "time",
+    "model_type": "crash_severity_net",
+    "loss_type": "ce_weighted",
+    "use_sampler": false,
+    "use_smote": false,
+    "gamma": 2.0
+}
