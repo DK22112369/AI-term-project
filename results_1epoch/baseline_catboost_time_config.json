@@ -1,7 +1,0 @@
-{
-    "data_path": "data/raw/US_Accidents_March23.csv",
-    "sample_frac": 0.01,
-    "model_type": "catboost",
-    "seed": 42,
-    "split_strategy": "time"
-}
